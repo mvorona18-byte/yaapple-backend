@@ -36,7 +36,8 @@ function esc(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 async function loadCategories() {
@@ -66,12 +67,28 @@ function renderCategories() {
             <h3>${esc(category.name)}</h3>
 
             <div class="muted">
-              Порядок: ${Number(category.sort_order || 0)}
-            </div>
-
-            <div class="muted">
               ${category.is_active ? 'Показывается' : 'Скрыта'}
             </div>
+          </div>
+
+          <div class="itemBtns">
+            <button onclick="editCategory(${category.id})">
+              Изменить
+            </button>
+
+            <button
+              class="gray"
+              onclick="toggleCategory(${category.id})"
+            >
+              ${category.is_active ? 'Скрыть' : 'Показать'}
+            </button>
+
+            <button
+              class="gray"
+              onclick="deleteCategory(${category.id})"
+            >
+              Удалить
+            </button>
           </div>
         </article>
       `).join('')
@@ -93,7 +110,7 @@ function render() {
 
           ${
             product.images?.[0]
-              ? `<img src="${product.images[0].url}">`
+              ? `<img src="${product.images[0].url}" alt="">`
               : '<div></div>'
           }
 
@@ -132,13 +149,77 @@ function render() {
     : '<p class="muted">Товаров пока нет</p>';
 }
 
-function reset() {
+function resetProductForm() {
   $('productForm').reset();
   $('pid').value = '';
   $('active').checked = true;
   $('formTitle').textContent = 'Добавить товар';
   $('cancel').hidden = true;
 }
+
+function resetCategoryForm() {
+  $('categoryForm').reset();
+  $('categoryId').value = '';
+  $('categoryActive').checked = true;
+  $('categorySubmit').textContent = 'Добавить категорию';
+  $('categoryCancel').hidden = true;
+}
+
+window.editCategory = id => {
+  const category = categories.find(item => item.id === id);
+
+  if (!category) return;
+
+  $('categoryId').value = category.id;
+  $('categoryName').value = category.name;
+  $('categoryActive').checked = Boolean(category.is_active);
+  $('categorySubmit').textContent = 'Сохранить изменения';
+  $('categoryCancel').hidden = false;
+  $('categoryMsg').textContent = '';
+
+  $('categoryName').focus();
+
+  scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+};
+
+window.toggleCategory = async id => {
+  try {
+    await api(`/api/categories/${id}/visibility`, {
+      method: 'PATCH'
+    });
+
+    await loadCategories();
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+window.deleteCategory = async id => {
+  const category = categories.find(item => item.id === id);
+
+  if (!category) return;
+
+  const confirmed = confirm(
+    `Удалить категорию «${category.name}»?\n\n` +
+    'Товары из неё перейдут в «Без категории».'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api(`/api/categories/${id}`, {
+      method: 'DELETE'
+    });
+
+    resetCategoryForm();
+    await load();
+  } catch (error) {
+    alert(error.message);
+  }
+};
 
 window.editP = id => {
   const product = products.find(item => item.id === id);
@@ -170,15 +251,21 @@ window.editP = id => {
 window.delP = async id => {
   if (!confirm('Удалить товар?')) return;
 
-  await api(`/api/products/${id}`, {
-    method: 'DELETE'
-  });
+  try {
+    await api(`/api/products/${id}`, {
+      method: 'DELETE'
+    });
 
-  await load();
+    await load();
+  } catch (error) {
+    alert(error.message);
+  }
 };
 
 $('loginForm').onsubmit = async event => {
   event.preventDefault();
+
+  $('loginMsg').textContent = '';
 
   try {
     const data = await api('/api/auth/login', {
@@ -205,27 +292,33 @@ $('loginForm').onsubmit = async event => {
 $('categoryForm').onsubmit = async event => {
   event.preventDefault();
 
+  const id = $('categoryId').value;
+  const name = $('categoryName').value.trim();
+
   $('categoryMsg').textContent = '';
 
   try {
-    await api('/api/categories', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: $('categoryName').value,
-        sort_order: Number($('categorySort').value || 0),
-        is_active: $('categoryActive').checked
-      })
-    });
+    await api(
+      id ? `/api/categories/${id}` : '/api/categories',
+      {
+        method: id ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name,
+          is_active: $('categoryActive').checked
+        })
+      }
+    );
 
-    $('categoryForm').reset();
-    $('categorySort').value = '0';
-    $('categoryActive').checked = true;
-    $('categoryMsg').textContent = 'Категория добавлена';
+    resetCategoryForm();
 
-    await loadCategories();
+    $('categoryMsg').textContent = id
+      ? 'Категория обновлена'
+      : 'Категория добавлена';
+
+    await load();
   } catch (error) {
     $('categoryMsg').textContent = error.message;
   }
@@ -268,14 +361,16 @@ $('productForm').onsubmit = async event => {
 
     $('formMsg').textContent = 'Сохранено';
 
-    reset();
+    resetProductForm();
     await load();
   } catch (error) {
     $('formMsg').textContent = error.message;
   }
 };
 
-$('cancel').onclick = reset;
+$('cancel').onclick = resetProductForm;
+
+$('categoryCancel').onclick = resetCategoryForm;
 
 $('refresh').onclick = load;
 
@@ -299,6 +394,7 @@ $('logout').onclick = () => {
     await load();
   } catch {
     localStorage.removeItem('ya_token');
+    token = null;
     showLogin();
   }
 })();
