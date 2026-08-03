@@ -81,6 +81,91 @@ app.post('/api/categories',auth,async(req,res)=>{
   const [result]=await pool.query('INSERT INTO categories(name,slug,sort_order,is_active) VALUES (?,?,?,?)',[name,slugify(req.body.slug||name),Number(req.body.sort_order||0),req.body.is_active!==false]);
   res.status(201).json({id:result.insertId});
 });
+app.put('/api/categories/:id', auth, async (req, res) => {
+  const id = Number(req.params.id);
+  const name = String(req.body.name || '').trim();
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Некорректная категория' });
+  }
+
+  if (!name) {
+    return res.status(400).json({ error: 'Введите название' });
+  }
+
+  const [rows] = await pool.query(
+    'SELECT id FROM categories WHERE id=? LIMIT 1',
+    [id]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: 'Категория не найдена' });
+  }
+
+  await pool.query(
+    'UPDATE categories SET name=?, slug=?, is_active=? WHERE id=?',
+    [
+      name,
+      slugify(name),
+      req.body.is_active !== false,
+      id
+    ]
+  );
+
+  res.json({ message: 'Категория обновлена' });
+});
+
+app.patch('/api/categories/:id/visibility', auth, async (req, res) => {
+  const id = Number(req.params.id);
+
+  const [rows] = await pool.query(
+    'SELECT id, is_active FROM categories WHERE id=? LIMIT 1',
+    [id]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: 'Категория не найдена' });
+  }
+
+  const nextValue = !Boolean(rows[0].is_active);
+
+  await pool.query(
+    'UPDATE categories SET is_active=? WHERE id=?',
+    [nextValue, id]
+  );
+
+  res.json({
+    message: nextValue ? 'Категория показана' : 'Категория скрыта',
+    is_active: nextValue
+  });
+});
+
+app.delete('/api/categories/:id', auth, async (req, res) => {
+  const id = Number(req.params.id);
+
+  const [rows] = await pool.query(
+    'SELECT id FROM categories WHERE id=? LIMIT 1',
+    [id]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: 'Категория не найдена' });
+  }
+
+  await pool.query(
+    'UPDATE products SET category_id=NULL WHERE category_id=?',
+    [id]
+  );
+
+  await pool.query(
+    'DELETE FROM categories WHERE id=?',
+    [id]
+  );
+
+  res.json({
+    message: 'Категория удалена. Товары перенесены в «Без категории»'
+  });
+});
 
 async function productsWithImages(all=false){
   const [rows]=await pool.query(`SELECT p.*,c.name category_name,c.slug category_slug FROM products p LEFT JOIN categories c ON c.id=p.category_id ${all?'':'WHERE p.is_active=TRUE'} ORDER BY p.created_at DESC`);
