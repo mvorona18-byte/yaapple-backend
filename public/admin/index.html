@@ -48,39 +48,40 @@
           </button>
         </div>
 
-        <form id="categoryForm">
-          <div class="row">
-            <label>
-              Название категории
-              <input
-                id="categoryName"
-                placeholder="Например: Автодержатели"
-                required
-              >
-            </label>
+     <form id="categoryForm">
+  <input id="categoryId" type="hidden">
 
-            <label>
-              Порядок
-              <input
-                id="categorySort"
-                type="number"
-                min="0"
-                value="0"
-              >
-            </label>
-          </div>
+  <label>
+    Название категории
+    <input
+      id="categoryName"
+      placeholder="Например: Автодержатели"
+      required
+    >
+  </label>
 
-          <label class="check">
-            <input id="categoryActive" type="checkbox" checked>
-            Показывать категорию
-          </label>
+  <label class="check">
+    <input id="categoryActive" type="checkbox" checked>
+    Показывать категорию
+  </label>
 
-          <div class="actions">
-            <button type="submit">Добавить категорию</button>
-          </div>
+  <div class="actions">
+    <button id="categorySubmit" type="submit">
+      Добавить категорию
+    </button>
 
-          <p id="categoryMsg"></p>
-        </form>
+    <button
+      id="categoryCancel"
+      type="button"
+      class="gray"
+      hidden
+    >
+      Отмена
+    </button>
+  </div>
+
+  <p id="categoryMsg"></p>
+</form>
 
         <div id="categoryList"></div>
       </section>
