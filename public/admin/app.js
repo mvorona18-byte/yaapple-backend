@@ -152,6 +152,7 @@ function render() {
 function resetProductForm() {
   $('productForm').reset();
   $('pid').value = '';
+  $('instagram_reel_url').value = '';
   $('active').checked = true;
   $('formTitle').textContent = 'Добавить товар';
   $('cancel').hidden = true;
@@ -231,6 +232,7 @@ window.editP = id => {
   $('category').value = product.category_id || '';
   $('price').value = product.price;
   $('oldPrice').value = product.old_price || '';
+  $('instagram_reel_url').value = product.instagram_reel_url || '';
   $('stock').value = product.stock;
   $('badge').value = product.badge || '';
   $('description').value = product.description || '';
@@ -338,6 +340,7 @@ $('productForm').onsubmit = async event => {
     ['stock', $('stock').value],
     ['badge', $('badge').value],
     ['description', $('description').value],
+    ['instagram_reel_url', $('instagram_reel_url').value],
     ['is_featured', $('featured').checked],
     ['is_active', $('active').checked]
   ];
