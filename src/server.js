@@ -182,7 +182,7 @@ app.post('/api/products',auth,upload.array('images',8),async(req,res)=>{
   const name=String(req.body.name||'').trim(); const price=Number(req.body.price);
 const instagramReelUrl = String(req.body.instagram_reel_url || '').trim();
   if(!name||!Number.isFinite(price)||price<0)return res.status(400).json({error:'Проверьте название и цену'});
-  const [result]=await pool.query(`INSERT INTO products(category_id,name,slug,description,price,old_price,stock,badge,is_featured,is_active,instagram_reel_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [
+  const [result]=await pool.query(`INSERT INTO products(category_id,name,slug,description,price,old_price,stock,badge,is_featured,is_active,instagram_reel_url) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [
     req.body.category_id?Number(req.body.category_id):null,name,`${slugify(name)}-${Date.now().toString().slice(-6)}`,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),instagramReelUrl || null
   ]);
   for(const [i,f] of (req.files||[]).entries())await pool.query('INSERT INTO product_images(product_id,file_name,url,sort_order) VALUES (?,?,?,?)',[result.insertId,f.filename,`/uploads/${f.filename}`,i]);
@@ -192,7 +192,7 @@ app.put('/api/products/:id',auth,upload.array('images',8),async(req,res)=>{
   const id=Number(req.params.id),name=String(req.body.name||'').trim(),price=Number(req.body.price);
 const instagramReelUrl = String(req.body.instagram_reel_url || '').trim();
   if(!name||!Number.isFinite(price)||price<0)return res.status(400).json({error:'Проверьте название и цену'});
-  await pool.query(`UPDATE products SET category_id=?,name=?,description=?,price=?,old_price=?,stock=?,badge=?,is_featured=?,is_active=?,instagram_reel_url=? WHERE id=? ,[req.body.category_id?Number(req.body.category_id):null,name,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),instagramReelUrl || null,id];
+  await pool.query(`UPDATE products SET category_id=?,name=?,description=?,price=?,old_price=?,stock=?,badge=?,is_featured=?,is_active=?,instagram_reel_url=? WHERE id=?` ,[req.body.category_id?Number(req.body.category_id):null,name,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),instagramReelUrl || null,id];
   const [[m]]=await pool.query('SELECT COALESCE(MAX(sort_order),-1) max_sort FROM product_images WHERE product_id=?',[id]);
 for (const [i, f] of (req.files || []).entries()) await pool.query('INSERT INTO product_images(product_id,file_name,url,sort_order) VALUES (?,?,?,?)', [id, f.filename, `/uploads/${f.filename}`, m.max_sort + i + 1]);
 res.json({message:'Товар обновлён'});
