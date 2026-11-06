@@ -44,7 +44,11 @@ const upload = multer({
 async function initDb(){
   await pool.query(`CREATE TABLE IF NOT EXISTS admins(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,email VARCHAR(190) NOT NULL UNIQUE,password_hash VARCHAR(255) NOT NULL,name VARCHAR(120) NOT NULL DEFAULT 'Администратор',role ENUM('owner','manager') NOT NULL DEFAULT 'manager',is_active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await pool.query(`CREATE TABLE IF NOT EXISTS categories(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,slug VARCHAR(140) NOT NULL UNIQUE,sort_order INT DEFAULT 0,is_active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-  await pool.query(`CREATE TABLE IF NOT EXISTS products(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,category_id INT UNSIGNED NULL,name VARCHAR(255) NOT NULL,slug VARCHAR(280) NOT NULL UNIQUE,description TEXT NULL,price DECIMAL(12,2) NOT NULL DEFAULT 0,old_price DECIMAL(12,2) NULL,stock INT DEFAULT 0,badge VARCHAR(80) NULL,is_featured BOOLEAN DEFAULT FALSE,is_active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+await pool.query(`CREATE TABLE IF NOT EXISTS products(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,category_id INT UNSIGNED NULL,name VARCHAR(255) NOT NULL,slug VARCHAR(280) NOT NULL UNIQUE,description TEXT NULL,price DECIMAL(12,2) NOT NULL DEFAULT 0,old_price DECIMAL(12,2) NULL,stock INT DEFAULT 0,badge VARCHAR(80) NULL,is_featured BOOLEAN DEFAULT FALSE,is_active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+const [reelColumns] = await pool.query("SHOW COLUMNS FROM products LIKE 'instagram_reel_url'");
+if (reelColumns.length === 0) {
+  await pool.query("ALTER TABLE products ADD COLUMN instagram_reel_url TEXT NULL");
+}
   await pool.query(`CREATE TABLE IF NOT EXISTS product_images(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED NOT NULL,file_name VARCHAR(255) NOT NULL,url VARCHAR(500) NOT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await pool.query(`INSERT IGNORE INTO categories(name,slug,sort_order) VALUES ('Чехлы','cases',10),('Кабели','cables',20),('Блоки питания','power-adapters',30),('Зарядные станции','charging-stations',40),('Повербанки','powerbanks',50),('Другое','other',100)`);
   const [admins]=await pool.query('SELECT id FROM admins LIMIT 1');
@@ -176,17 +180,19 @@ async function productsWithImages(all=false){
 app.get('/api/products',async(req,res)=>res.json(await productsWithImages(req.query.all==='1')));
 app.post('/api/products',auth,upload.array('images',8),async(req,res)=>{
   const name=String(req.body.name||'').trim(); const price=Number(req.body.price);
+const instagramReelUrl = String(req.body.instagram_reel_url || '').trim();
   if(!name||!Number.isFinite(price)||price<0)return res.status(400).json({error:'Проверьте название и цену'});
-  const [result]=await pool.query(`INSERT INTO products(category_id,name,slug,description,price,old_price,stock,badge,is_featured,is_active) VALUES (?,?,?,?,?,?,?,?,?,?)`,[
-    req.body.category_id?Number(req.body.category_id):null,name,`${slugify(name)}-${Date.now().toString().slice(-6)}`,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true)
+  const [result]=await pool.query(`INSERT INTO products(category_id,name,slug,description,price,old_price,stock,badge,is_featured,is_active,instagram_reel_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    req.body.category_id?Number(req.body.category_id):null,name,`${slugify(name)}-${Date.now().toString().slice(-6)}`,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),instagramReelUrl || null
   ]);
   for(const [i,f] of (req.files||[]).entries())await pool.query('INSERT INTO product_images(product_id,file_name,url,sort_order) VALUES (?,?,?,?)',[result.insertId,f.filename,`/uploads/${f.filename}`,i]);
   res.status(201).json({id:result.insertId,message:'Товар добавлен'});
 });
 app.put('/api/products/:id',auth,upload.array('images',8),async(req,res)=>{
   const id=Number(req.params.id),name=String(req.body.name||'').trim(),price=Number(req.body.price);
+const instagramReelUrl = String(req.body.instagram_reel_url || '').trim();
   if(!name||!Number.isFinite(price)||price<0)return res.status(400).json({error:'Проверьте название и цену'});
-  await pool.query(`UPDATE products SET category_id=?,name=?,description=?,price=?,old_price=?,stock=?,badge=?,is_featured=?,is_active=? WHERE id=?`,[req.body.category_id?Number(req.body.category_id):null,name,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),id]);
+  await pool.query(`UPDATE products SET category_id=?,name=?,description=?,price=?,old_price=?,stock=?,badge=?,is_featured=?,is_active=?,instagram_reel_url=? WHERE id=? ,[req.body.category_id?Number(req.body.category_id):null,name,req.body.description||null,price,req.body.old_price?Number(req.body.old_price):null,Number(req.body.stock||0),req.body.badge||null,bool(req.body.is_featured),bool(req.body.is_active,true),instagramReelUrl || null,id];
   const [[m]]=await pool.query('SELECT COALESCE(MAX(sort_order),-1) max_sort FROM product_images WHERE product_id=?',[id]);
   for(const [i,f] of (req.files||[]).entries())await pool.query('INSERT INTO product_images(product_id,file_name,url,sort_order) VALUES (?,?,?,?)',[id,f.filename,`/uploads/${f.filename}`,m.max_sort+i+1]);
   res.json({message:'Товар обновлён'});
